@@ -13,7 +13,7 @@ WIDTH, HEIGHT = 900, 650
 GROUND_Y = 520
 FPS = 60
 
-# FyziKa (skok) - opice skace min
+# Fyzika (skok)
 GRAVITY = 1850
 JUMP_VEL = -980
 BOOST_JUMP_VEL = -1120
@@ -40,11 +40,11 @@ HITBOX_PAD = 8
 ANIM_RUN_FPS = 12
 ANIM_JUMP_FPS = 10
 
-# banán větší (ikona velká)
 BANANA_SCALE = (110, 110)
+BARRICADE_SCALE_FACTOR = 0.25  # překážka na 1/4 původní velikosti
 
-# fallback překážky bez obrázku
-BARRICADE_SCALE = (150, 150)
+# debug hitboxy
+SHOW_DEBUG_HITBOX = True
 
 # -----------------------------
 # AUTO-NALEZENÍ ASSETŮ
@@ -79,7 +79,7 @@ JUMP_FRAMES = sorted(glob.glob(os.path.join(SPRITES_DIR, "opice_jump_*.png")))
 # Pomocné
 # -----------------------------
 def load_sprite(path, scale=None):
-    """Načte PNG, ořízne prázdné okraje, škáluje a znovu ořízne (těsný hitbox)."""
+    """Načte PNG, ořízne prázdné okraje, škáluje a znovu ořízne."""
     if not os.path.exists(path):
         print(f"[CHYBA] Soubor neexistuje: {path}")
         return None
@@ -105,6 +105,44 @@ def load_sprite(path, scale=None):
         print(f"[CHYBA] Nelze načíst obrázek {path}: {e}")
         return None
 
+def load_obstacle_sprite(path, alpha_threshold=10):
+    """
+    Načte překážku a tvrdě ji ořízne podle neprůhledných pixelů.
+    To řeší problém, kdy je obsah PNG malý uvnitř velkého průhledného plátna.
+    """
+    if not os.path.exists(path):
+        print(f"[CHYBA] Soubor neexistuje: {path}")
+        return None
+
+    try:
+        img = pygame.image.load(path).convert_alpha()
+        w, h = img.get_size()
+
+        min_x, min_y = w, h
+        max_x, max_y = -1, -1
+
+        for y in range(h):
+            for x in range(w):
+                if img.get_at((x, y)).a > alpha_threshold:
+                    if x < min_x:
+                        min_x = x
+                    if y < min_y:
+                        min_y = y
+                    if x > max_x:
+                        max_x = x
+                    if y > max_y:
+                        max_y = y
+
+        if max_x >= min_x and max_y >= min_y:
+            img = img.subsurface(
+                pygame.Rect(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
+            ).copy()
+
+        return img
+    except Exception as e:
+        print(f"[CHYBA] Nelze načíst obstacle {path}: {e}")
+        return None
+
 def load_anim(paths, scale=None):
     frames = []
     for p in paths:
@@ -113,11 +151,8 @@ def load_anim(paths, scale=None):
             frames.append(img)
     return frames
 
-def clamp(x, a, b):
-    return max(a, min(b, x))
-
 # -----------------------------
-# Futuristické pozadí (loď)
+# Futuristické pozadí
 # -----------------------------
 def draw_stars(screen, rect, t):
     for i in range(140):
@@ -194,8 +229,12 @@ class Player:
         bbox = self.img.get_bounding_rect()
         r = pygame.Rect(int(self.x) + bbox.x, int(self.y) + bbox.y, bbox.w, bbox.h)
         r.inflate_ip(-HITBOX_PAD * 2, -HITBOX_PAD * 2)
-        if r.w < 2: r.w = 2
-        if r.h < 2: r.h = 2
+
+        if r.w < 2:
+            r.w = 2
+        if r.h < 2:
+            r.h = 2
+
         return r
 
     def draw(self, screen):
@@ -210,7 +249,7 @@ class Obstacle:
     y: float
     w: int
     h: int
-    img: pygame.Surface | None = None  # IKONA bude škálovaná NA HITBOX
+    img: pygame.Surface | None = None
 
     def rect(self):
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
@@ -248,13 +287,17 @@ def main():
     monkey_img = run_frames[0] if run_frames else (jump_frames[0] if jump_frames else None)
 
     banana_img = load_sprite(BANANA_FILE, scale=BANANA_SCALE)
-    barricade_raw = load_sprite(BARRICADE_FILE)  # bez scale (škálujeme při spawnu)
+    barricade_raw = load_obstacle_sprite(BARRICADE_FILE)
 
     missing = []
-    if not run_frames: missing.append("sprites/opice_run_*.png")
-    if not jump_frames: missing.append("sprites/opice_jump_*.png")
-    if banana_img is None: missing.append("banan.png")
-    if barricade_raw is None: missing.append("prekazka.png")
+    if not run_frames:
+        missing.append("sprites/opice_run_*.png")
+    if not jump_frames:
+        missing.append("sprites/opice_jump_*.png")
+    if banana_img is None:
+        missing.append("banan.png")
+    if barricade_raw is None:
+        missing.append("prekazka.png")
 
     player = Player(x=120, y=0, img=monkey_img)
     if player.img:
@@ -321,8 +364,6 @@ def main():
 
             # -----------------------------
             # spawn překážek
-            # HITBOX určuje velikost
-            # IKONA se škáluje PŘESNĚ NA HITBOX
             # -----------------------------
             next_obs_in -= dt
             can_spawn_by_gap = True
@@ -334,14 +375,18 @@ def main():
             if next_obs_in <= 0 and can_spawn_by_gap:
                 monkey_h = player.img.get_height() if player.img else MONKEY_SCALE
 
-                # Velikost HITBOXU překážky (tady upravuješ velikost překážky)
-                hit_h = max(20, int(monkey_h * 0.75))  # zkus 0.7 / 0.8 / 0.9
-                hit_w = max(20, int(hit_h * 0.8))      # šířka hitboxu (poměr)
+                # překážka zmenšená na 1/4 původní velikosti
+                base_h = max(100, int(monkey_h * 1.1))
+                target_h = max(25, int(base_h * BARRICADE_SCALE_FACTOR))
 
                 if barricade_raw:
-                    # IKONA = přesně velikost HITBOXU (klidně deformuje poměr stran)
+                    aspect = barricade_raw.get_width() / barricade_raw.get_height()
+                    hit_h = target_h
+                    hit_w = max(15, int(hit_h * aspect))
                     obs_img = pygame.transform.smoothscale(barricade_raw, (hit_w, hit_h))
                 else:
+                    hit_h = target_h
+                    hit_w = max(15, int(hit_h * 1.0))
                     obs_img = None
 
                 obstacles.append(Obstacle(
@@ -354,7 +399,7 @@ def main():
                 next_obs_in = random.uniform(SPAWN_OBS_MIN, SPAWN_OBS_MAX)
 
             # -----------------------------
-            # spawn banánů (na podlaze nebo na vršku překážky)
+            # spawn banánů
             # -----------------------------
             next_banana_in -= dt
             if next_banana_in <= 0:
@@ -362,17 +407,14 @@ def main():
                 bh = banana_img.get_height() if banana_img else BANANA_SCALE[1]
                 spawn_x = WIDTH + 30
 
-                # default: na podlaze
                 y = GROUND_Y - bh
 
-                # občas banán na vršku překážky (když je překážka nejblíž ve spawn oblasti)
                 if obstacles and random.random() < 0.55:
                     last = obstacles[-1]
                     if abs(last.x - spawn_x) < 200:
                         y = last.y - bh
 
-                # pojistky
-                y = min(y, GROUND_Y - bh)  # nikdy pod podlahou
+                y = min(y, GROUND_Y - bh)
                 y = max(0, y)
 
                 bananas.append(Banana(x=spawn_x, y=y, w=bw, h=bh))
@@ -382,6 +424,7 @@ def main():
             # update
             # -----------------------------
             player.update(dt)
+
             for o in obstacles:
                 o.update(dt, world_speed)
             for b in bananas:
@@ -394,6 +437,7 @@ def main():
             # kolize
             # -----------------------------
             pr = player.rect()
+
             for o in obstacles:
                 if pr.colliderect(o.rect()):
                     game_over = True
@@ -410,7 +454,7 @@ def main():
             score += dt * 10
 
         # -----------------------------
-        # ANIMACE (RUN vs JUMP)
+        # ANIMACE
         # -----------------------------
         frames = None
         anim_fps = ANIM_RUN_FPS
@@ -437,9 +481,9 @@ def main():
         t = pygame.time.get_ticks() / 1000.0
         draw_futuristic_ship_background(screen, t)
 
-        # podlaha lodi
         pygame.draw.rect(screen, (22, 26, 38), (0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y))
         pygame.draw.line(screen, (80, 220, 255), (0, GROUND_Y), (WIDTH, GROUND_Y), 3)
+
         for x in range(0, WIDTH, 70):
             pygame.draw.line(screen, (45, 55, 80), (x, GROUND_Y), (x + 30, HEIGHT), 2)
 
@@ -459,19 +503,24 @@ def main():
                 screen.blit(banana_img, (int(b.x), int(b.y)))
             else:
                 pygame.draw.rect(screen, (255, 220, 80), b.rect())
-            pygame.draw.rect(screen, (255, 0, 0), b.rect(), 2)
 
-        # překážky (ikona = hitbox)
+            if SHOW_DEBUG_HITBOX:
+                pygame.draw.rect(screen, (255, 0, 0), b.rect(), 2)
+
+        # překážky
         for o in obstacles:
             if o.img:
                 screen.blit(o.img, (int(o.x), int(o.y)))
             else:
                 pygame.draw.rect(screen, (160, 160, 170), o.rect())
-            pygame.draw.rect(screen, (255, 0, 0), o.rect(), 2)
 
-        # opice + hitbox debug
+            if SHOW_DEBUG_HITBOX:
+                pygame.draw.rect(screen, (255, 0, 0), o.rect(), 2)
+
+        # opice
         player.draw(screen)
-        pygame.draw.rect(screen, (0, 255, 0), player.rect(), 2)
+        if SHOW_DEBUG_HITBOX:
+            pygame.draw.rect(screen, (0, 255, 0), player.rect(), 2)
 
         if game_over:
             overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
