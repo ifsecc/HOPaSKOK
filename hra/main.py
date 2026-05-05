@@ -6,57 +6,24 @@ import glob
 import math
 from dataclasses import dataclass
 
-# -----------------------------
-# Okno / hra
-# -----------------------------
-WIDTH, HEIGHT = 900, 650
-GROUND_Y = 520
-FPS = 60
+import settings
+from menu import run_menu
+from settings import *
 
-# Fyzika (skok)
-GRAVITY = 1850
-JUMP_VEL = -980
-BOOST_JUMP_VEL = -1120
 
-# Rychlost světa
-BASE_SPEED = 320
-BOOST_SPEED_ADD = 220
-BOOST_DURATION = 3.5
-
-# Rozestupy překážek
-SPAWN_OBS_MIN = 1.9
-SPAWN_OBS_MAX = 2.8
-MIN_OBS_GAP_PX = 380
-
-# Banány
-SPAWN_BANANA_MIN = 2.5
-SPAWN_BANANA_MAX = 4.3
-
-# -----------------------------
-# VELIKOSTI + HITBOX + ANIM
-# -----------------------------
-MONKEY_SCALE = 160
-HITBOX_PAD = 8
-ANIM_RUN_FPS = 12
-ANIM_JUMP_FPS = 10
-
-BANANA_SCALE = (110, 110)
-BARRICADE_SCALE_FACTOR = 0.25  # překážka na 1/4 původní velikosti
-
-# debug hitboxy
 SHOW_DEBUG_HITBOX = True
 
-# -----------------------------
-# AUTO-NALEZENÍ ASSETŮ
-# -----------------------------
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(SCRIPT_DIR)
 
+
 def pick_existing(*paths):
+    #hledáSoubor #vrátíPrvníExistujícíCestu #fallbackKdyžNicNenajde
     for p in paths:
         if os.path.exists(p):
             return p
     return paths[0]
+
 
 SPRITES_DIR = pick_existing(
     os.path.join(SCRIPT_DIR, "sprites"),
@@ -67,6 +34,7 @@ BANANA_FILE = pick_existing(
     os.path.join(SCRIPT_DIR, "banan.png"),
     os.path.join(PARENT_DIR, "banan.png"),
 )
+
 BARRICADE_FILE = pick_existing(
     os.path.join(SCRIPT_DIR, "prekazka.png"),
     os.path.join(PARENT_DIR, "prekazka.png"),
@@ -75,14 +43,13 @@ BARRICADE_FILE = pick_existing(
 RUN_FRAMES = sorted(glob.glob(os.path.join(SPRITES_DIR, "opice_run_*.png")))
 JUMP_FRAMES = sorted(glob.glob(os.path.join(SPRITES_DIR, "opice_jump_*.png")))
 
-# -----------------------------
-# Pomocné
-# -----------------------------
+
 def load_sprite(path, scale=None):
-    """Načte PNG, ořízne prázdné okraje, škáluje a znovu ořízne."""
+    #načítáSprite #kontrolujeSoubor #ořezáváPrůhlednéOkraje #měníVelikost #vracíObrázek
     if not os.path.exists(path):
         print(f"[CHYBA] Soubor neexistuje: {path}")
         return None
+
     try:
         img = pygame.image.load(path).convert_alpha()
 
@@ -101,15 +68,14 @@ def load_sprite(path, scale=None):
             img = img.subsurface(bbox2).copy()
 
         return img
+
     except Exception as e:
         print(f"[CHYBA] Nelze načíst obrázek {path}: {e}")
         return None
 
+
 def load_obstacle_sprite(path, alpha_threshold=10):
-    """
-    Načte překážku a tvrdě ji ořízne podle neprůhledných pixelů.
-    To řeší problém, kdy je obsah PNG malý uvnitř velkého průhledného plátna.
-    """
+    #načítáPřekážku #kontrolujeSoubor #ručněOřezáváPrůhlednost #lepšíKolize #vracíObrázek
     if not os.path.exists(path):
         print(f"[CHYBA] Soubor neexistuje: {path}")
         return None
@@ -124,14 +90,10 @@ def load_obstacle_sprite(path, alpha_threshold=10):
         for y in range(h):
             for x in range(w):
                 if img.get_at((x, y)).a > alpha_threshold:
-                    if x < min_x:
-                        min_x = x
-                    if y < min_y:
-                        min_y = y
-                    if x > max_x:
-                        max_x = x
-                    if y > max_y:
-                        max_y = y
+                    min_x = min(min_x, x)
+                    min_y = min(min_y, y)
+                    max_x = max(max_x, x)
+                    max_y = max(max_y, y)
 
         if max_x >= min_x and max_y >= min_y:
             img = img.subsurface(
@@ -139,11 +101,14 @@ def load_obstacle_sprite(path, alpha_threshold=10):
             ).copy()
 
         return img
+
     except Exception as e:
         print(f"[CHYBA] Nelze načíst obstacle {path}: {e}")
         return None
 
+
 def load_anim(paths, scale=None):
+    #načítáAnimaci #procházíVšechnySnímky #ukládáSprityDoListu #vracíFrames
     frames = []
     for p in paths:
         img = load_sprite(p, scale=scale)
@@ -151,10 +116,9 @@ def load_anim(paths, scale=None):
             frames.append(img)
     return frames
 
-# -----------------------------
-# Futuristické pozadí
-# -----------------------------
+
 def draw_stars(screen, rect, t):
+    #kreslíHvězdy #blikáníHvězd #vesmírnéPozadí #animacePodleČasu
     for i in range(140):
         x = rect.x + (i * 73) % rect.w
         y = rect.y + (i * 41) % rect.h
@@ -170,7 +134,9 @@ def draw_stars(screen, rect, t):
             if 0 <= x < WIDTH and 0 <= y < HEIGHT:
                 screen.set_at((x, y), (bright, bright, bright))
 
+
 def draw_futuristic_ship_background(screen, t):
+    #kreslíPozadí #sciFiLoď #oknoDoVesmíru #neonovéČáry #voláHvězdy
     screen.fill((12, 14, 22))
 
     for y in range(0, HEIGHT, 6):
@@ -188,11 +154,10 @@ def draw_futuristic_ship_background(screen, t):
     pygame.draw.line(screen, (80, 220, 255), (0, 330), (WIDTH, 330), 2)
     pygame.draw.line(screen, (255, 90, 200), (0, 360), (WIDTH, 360), 2)
 
-# -----------------------------
-# Entity
-# -----------------------------
+
 @dataclass
 class Player:
+    #třídaHráče #pozice #rychlost #skok #animace #obrázek
     x: float
     y: float
     vy: float = 0.0
@@ -202,6 +167,7 @@ class Player:
     img: pygame.Surface | None = None
 
     def jump(self, boosted: bool):
+        #skokHráče #kontrolaJestliJeNaZemi #normálníSkokNeboBoost #resetAnimace
         if self.on_ground:
             self.vy = BOOST_JUMP_VEL if boosted else JUMP_VEL
             self.on_ground = False
@@ -209,6 +175,7 @@ class Player:
             self.frame = 0
 
     def update(self, dt: float):
+        #aktualizaceHráče #gravitace #pohybNahoruADolů #dopadNaZem #časAnimace
         self.vy += GRAVITY * dt
         self.y += self.vy * dt
 
@@ -223,6 +190,7 @@ class Player:
         self.anim_time += dt
 
     def rect(self):
+        #hitboxHráče #kolize #zmenšenýHitbox #ochranaProtiMocMalémuHitboxu
         if not self.img:
             return pygame.Rect(int(self.x), int(self.y), MONKEY_SCALE, MONKEY_SCALE)
 
@@ -238,13 +206,20 @@ class Player:
         return r
 
     def draw(self, screen):
+        #vykresleníHráče #kdyžMáObrázekTakSprite #jinakNáhradníObdélník
         if self.img:
             screen.blit(self.img, (int(self.x), int(self.y)))
         else:
-            pygame.draw.rect(screen, (210, 140, 90), (int(self.x), int(self.y), MONKEY_SCALE, MONKEY_SCALE))
+            pygame.draw.rect(
+                screen,
+                (210, 140, 90),
+                (int(self.x), int(self.y), MONKEY_SCALE, MONKEY_SCALE),
+            )
+
 
 @dataclass
 class Obstacle:
+    #třídaPřekážky #pozice #velikost #obrázek #kolize
     x: float
     y: float
     w: int
@@ -252,32 +227,45 @@ class Obstacle:
     img: pygame.Surface | None = None
 
     def rect(self):
+        #hitboxPřekážky #vracíRectProKolize
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
     def update(self, dt: float, world_speed: float):
+        #pohybPřekážky #posunDoleva #rychlostSvěta
         self.x -= world_speed * dt
+
 
 @dataclass
 class Banana:
+    #třídaBanánu #bonus #boost #pozice #velikost
     x: float
     y: float
     w: int
     h: int
 
     def rect(self):
+        #hitboxBanánu #vracíRectProSbírání
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
     def update(self, dt: float, world_speed: float):
+        #pohybBanánu #posunDoleva #rychlostSvěta
         self.x -= world_speed * dt
 
-# -----------------------------
-# Hlavní hra
-# -----------------------------
+
 def main():
+    #hlavníFunkceHry #spouštíPygame #menu #načítáAssety #herníSmyčka #kolize #score #render
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Opice Runner 🐒🍌")
     clock = pygame.time.Clock()
+
+    menu_settings = run_menu(screen, clock)
+    if menu_settings is None:
+        pygame.quit()
+        sys.exit()
+
+    fov = menu_settings.get("fov", settings.DEFAULT_FOV)
+
     font = pygame.font.SysFont("arial", 24, bold=True)
     big = pygame.font.SysFont("arial", 44, bold=True)
 
@@ -316,10 +304,11 @@ def main():
     next_banana_in = random.uniform(SPAWN_BANANA_MIN, SPAWN_BANANA_MAX)
 
     running = True
-    game_over = False
 
     def reset():
-        nonlocal obstacles, bananas, score, boost_time_left, next_obs_in, next_banana_in, game_over
+        #restartHry #vymažePřekážky #vymažeBanány #resetSkóre #resetBoostu #resetHráče #novéČasySpawnů
+        nonlocal obstacles, bananas, score, boost_time_left, next_obs_in, next_banana_in
+
         obstacles = []
         bananas = []
         score = 0.0
@@ -337,12 +326,13 @@ def main():
 
         next_obs_in = random.uniform(SPAWN_OBS_MIN, SPAWN_OBS_MAX)
         next_banana_in = random.uniform(SPAWN_BANANA_MIN, SPAWN_BANANA_MAX)
-        game_over = False
 
     while running:
+        #hlavníHerníSmyčka #počítáDeltaTime #zpracováváInput #aktualizujeHru #vykreslujeScénu
         dt = clock.tick(FPS) / 1000.0
 
         for event in pygame.event.get():
+            #zpracováníUdálostí #zavřeníOkna #klávesnice
             if event.type == pygame.QUIT:
                 running = False
 
@@ -351,133 +341,140 @@ def main():
                     running = False
 
                 if event.key in (pygame.K_SPACE, pygame.K_UP):
-                    if not game_over:
-                        player.jump(boosted=(boost_time_left > 0))
-                    else:
-                        reset()
+                    player.jump(boosted=(boost_time_left > 0))
 
-        if not game_over:
-            if boost_time_left > 0:
-                boost_time_left = max(0.0, boost_time_left - dt)
+        if boost_time_left > 0:
+            #odpočetBoostu #boostPostupněMizí
+            boost_time_left = max(0.0, boost_time_left - dt)
 
-            world_speed = BASE_SPEED + (BOOST_SPEED_ADD if boost_time_left > 0 else 0)
+        fov_multiplier = 1.0 + ((fov - settings.DEFAULT_FOV) / 100.0)
+        world_speed = (BASE_SPEED + (BOOST_SPEED_ADD if boost_time_left > 0 else 0)) * fov_multiplier
 
-            # -----------------------------
-            # spawn překážek
-            # -----------------------------
-            next_obs_in -= dt
-            can_spawn_by_gap = True
-            if obstacles:
-                last = obstacles[-1]
-                if last.x > WIDTH - MIN_OBS_GAP_PX:
-                    can_spawn_by_gap = False
+        next_obs_in -= dt
+        can_spawn_by_gap = True
 
-            if next_obs_in <= 0 and can_spawn_by_gap:
-                monkey_h = player.img.get_height() if player.img else MONKEY_SCALE
+        if obstacles:
+            #kontrolaMezeryMeziPřekážkami #abyNebylyMocBlízko
+            last = obstacles[-1]
+            if last.x > WIDTH - MIN_OBS_GAP_PX:
+                can_spawn_by_gap = False
 
-                # překážka zmenšená na 1/4 původní velikosti
-                base_h = max(100, int(monkey_h * 1.1))
-                target_h = max(25, int(base_h * BARRICADE_SCALE_FACTOR))
+        if next_obs_in <= 0 and can_spawn_by_gap:
+            #spawnPřekážky #vytvořeníPřekážky #škálováníPodleOpice
+            monkey_h = player.img.get_height() if player.img else MONKEY_SCALE
 
-                if barricade_raw:
-                    aspect = barricade_raw.get_width() / barricade_raw.get_height()
-                    hit_h = target_h
-                    hit_w = max(15, int(hit_h * aspect))
-                    obs_img = pygame.transform.smoothscale(barricade_raw, (hit_w, hit_h))
-                else:
-                    hit_h = target_h
-                    hit_w = max(15, int(hit_h * 1.0))
-                    obs_img = None
+            base_h = max(100, int(monkey_h * 1.1))
+            target_h = max(25, int(base_h * BARRICADE_SCALE_FACTOR))
 
-                obstacles.append(Obstacle(
+            if barricade_raw:
+                aspect = barricade_raw.get_width() / barricade_raw.get_height()
+                hit_h = target_h
+                hit_w = max(15, int(hit_h * aspect))
+                obs_img = pygame.transform.smoothscale(barricade_raw, (hit_w, hit_h))
+            else:
+                hit_h = target_h
+                hit_w = max(15, int(hit_h * 1.0))
+                obs_img = None
+
+            obstacles.append(
+                Obstacle(
                     x=WIDTH + 30,
                     y=GROUND_Y - hit_h,
                     w=hit_w,
                     h=hit_h,
-                    img=obs_img
-                ))
-                next_obs_in = random.uniform(SPAWN_OBS_MIN, SPAWN_OBS_MAX)
+                    img=obs_img,
+                )
+            )
 
-            # -----------------------------
-            # spawn banánů
-            # -----------------------------
-            next_banana_in -= dt
-            if next_banana_in <= 0:
-                bw = banana_img.get_width() if banana_img else BANANA_SCALE[0]
-                bh = banana_img.get_height() if banana_img else BANANA_SCALE[1]
-                spawn_x = WIDTH + 30
+            next_obs_in = random.uniform(SPAWN_OBS_MIN, SPAWN_OBS_MAX)
 
-                y = GROUND_Y - bh
+        next_banana_in -= dt
 
-                if obstacles and random.random() < 0.55:
-                    last = obstacles[-1]
-                    if abs(last.x - spawn_x) < 200:
-                        y = last.y - bh
+        if next_banana_in <= 0:
+            #spawnBanánu #nastaveníPozice #někdyNadPřekážkou #přidáníDoListu
+            bw = banana_img.get_width() if banana_img else BANANA_SCALE[0]
+            bh = banana_img.get_height() if banana_img else BANANA_SCALE[1]
+            spawn_x = WIDTH + 30
 
-                y = min(y, GROUND_Y - bh)
-                y = max(0, y)
+            y = GROUND_Y - bh
 
-                bananas.append(Banana(x=spawn_x, y=y, w=bw, h=bh))
-                next_banana_in = random.uniform(SPAWN_BANANA_MIN, SPAWN_BANANA_MAX)
+            if obstacles and random.random() < 0.55:
+                last = obstacles[-1]
+                if abs(last.x - spawn_x) < 200:
+                    y = last.y - bh
 
-            # -----------------------------
-            # update
-            # -----------------------------
-            player.update(dt)
+            y = min(y, GROUND_Y - bh)
+            y = max(0, y)
 
-            for o in obstacles:
-                o.update(dt, world_speed)
-            for b in bananas:
-                b.update(dt, world_speed)
+            bananas.append(Banana(x=spawn_x, y=y, w=bw, h=bh))
+            next_banana_in = random.uniform(SPAWN_BANANA_MIN, SPAWN_BANANA_MAX)
 
-            obstacles = [o for o in obstacles if o.x + o.w > -80]
-            bananas = [b for b in bananas if b.x + b.w > -80]
+        player.update(dt)
 
-            # -----------------------------
-            # kolize
-            # -----------------------------
-            pr = player.rect()
+        for o in obstacles:
+            #aktualizacePřekážek #posunDoleva
+            o.update(dt, world_speed)
 
-            for o in obstacles:
-                if pr.colliderect(o.rect()):
-                    game_over = True
-                    best = max(best, score)
+        for b in bananas:
+            #aktualizaceBanánů #posunDoleva
+            b.update(dt, world_speed)
 
-            new_bananas = []
-            for b in bananas:
-                if pr.colliderect(b.rect()):
-                    boost_time_left = BOOST_DURATION
-                else:
-                    new_bananas.append(b)
-            bananas = new_bananas
+        obstacles = [o for o in obstacles if o.x + o.w > -80]
+        bananas = [b for b in bananas if b.x + b.w > -80]
 
-            score += dt * 10
+        pr = player.rect()
 
-        # -----------------------------
-        # ANIMACE
-        # -----------------------------
+        for o in obstacles:
+            #kolizeSPřekážkou #gameOver #návratDoMenu #resetHry
+            if pr.colliderect(o.rect()):
+                best = max(best, score)
+
+                menu_settings = run_menu(screen, clock)
+                if menu_settings is None:
+                    pygame.quit()
+                    sys.exit()
+
+                fov = menu_settings.get("fov", settings.DEFAULT_FOV)
+                reset()
+                break
+
+        new_bananas = []
+
+        for b in bananas:
+            #kolizeSBanánem #sebráníBanánu #aktivaceBoostu
+            if pr.colliderect(b.rect()):
+                boost_time_left = BOOST_DURATION
+            else:
+                new_bananas.append(b)
+
+        bananas = new_bananas
+
+        score += dt * 10
+
         frames = None
         anim_fps = ANIM_RUN_FPS
 
         if not player.on_ground and jump_frames:
+            #animaceSkoku #kdyžHráčNeníNaZemi
             frames = jump_frames
             anim_fps = ANIM_JUMP_FPS
         elif run_frames:
+            #animaceBěhu #kdyžHráčBěží
             frames = run_frames
             anim_fps = ANIM_RUN_FPS
         elif jump_frames:
+            #náhradníAnimace #kdyžChybíRunFrames
             frames = jump_frames
             anim_fps = ANIM_JUMP_FPS
 
         if frames:
+            #výběrSnímkuAnimace #nastaveníAktuálníhoSpritu
             player.frame = int(player.anim_time * anim_fps) % len(frames)
             player.img = frames[player.frame]
+
             if player.on_ground:
                 player.y = GROUND_Y - player.img.get_height()
 
-        # -----------------------------
-        # Render
-        # -----------------------------
         t = pygame.time.get_ticks() / 1000.0
         draw_futuristic_ship_background(screen, t)
 
@@ -485,20 +482,24 @@ def main():
         pygame.draw.line(screen, (80, 220, 255), (0, GROUND_Y), (WIDTH, GROUND_Y), 3)
 
         for x in range(0, WIDTH, 70):
+            #kreslíPodlahovéČáry #efektPerspektivy
             pygame.draw.line(screen, (45, 55, 80), (x, GROUND_Y), (x + 30, HEIGHT), 2)
 
         screen.blit(font.render(f"Skóre: {int(score)}", True, (230, 235, 245)), (18, 12))
         screen.blit(font.render(f"Best: {int(best)}", True, (210, 215, 230)), (18, 40))
+        screen.blit(font.render(f"FOV: {fov}", True, (210, 215, 230)), (18, 68))
 
         if boost_time_left > 0:
-            screen.blit(font.render(f"BOOST: {boost_time_left:.1f}s", True, (255, 160, 230)), (18, 68))
+            #vykresleníBoostTextu #ukazujeKolikZbýváBoostu
+            screen.blit(font.render(f"BOOST: {boost_time_left:.1f}s", True, (255, 160, 230)), (18, 96))
 
         if missing:
+            #vykresleníChybějícíchSouborů #debugInfo
             msg = "CHYBÍ: " + ", ".join(missing)
-            screen.blit(font.render(msg, True, (255, 90, 90)), (18, 100))
+            screen.blit(font.render(msg, True, (255, 90, 90)), (18, 124))
 
-        # banány
         for b in bananas:
+            #vykresleníBanánů #spriteNeboFallbackObdélník #debugHitbox
             if banana_img:
                 screen.blit(banana_img, (int(b.x), int(b.y)))
             else:
@@ -507,8 +508,8 @@ def main():
             if SHOW_DEBUG_HITBOX:
                 pygame.draw.rect(screen, (255, 0, 0), b.rect(), 2)
 
-        # překážky
         for o in obstacles:
+            #vykresleníPřekážek #spriteNeboFallbackObdélník #debugHitbox
             if o.img:
                 screen.blit(o.img, (int(o.x), int(o.y)))
             else:
@@ -517,29 +518,22 @@ def main():
             if SHOW_DEBUG_HITBOX:
                 pygame.draw.rect(screen, (255, 0, 0), o.rect(), 2)
 
-        # opice
         player.draw(screen)
-        if SHOW_DEBUG_HITBOX:
-            pygame.draw.rect(screen, (0, 255, 0), player.rect(), 2)
 
-        if game_over:
-            overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, 160))
-            screen.blit(overlay, (0, 0))
-            t1 = big.render("GAME OVER", True, (255, 255, 255))
-            t2 = font.render("SPACE pro restart", True, (240, 240, 240))
-            screen.blit(t1, (WIDTH // 2 - t1.get_width() // 2, 170))
-            screen.blit(t2, (WIDTH // 2 - t2.get_width() // 2, 235))
+        if SHOW_DEBUG_HITBOX:
+            #vykresleníHitboxuHráče #debug
+            pygame.draw.rect(screen, (0, 255, 0), player.rect(), 2)
 
         pygame.display.flip()
 
     pygame.quit()
     sys.exit()
 
-# -------------------------------------------------
+
 AUTO_START = True
 
 if __name__ == "__main__":
+    #spuštěníSouboru #automatickýStartHry
     if AUTO_START:
         main()
     else:
