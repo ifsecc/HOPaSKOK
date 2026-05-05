@@ -1,0 +1,39 @@
+WIDTH = 900
+HEIGHT = 650
+GROUND_Y = 520
+FPS = 60
+
+
+FOV_MIN = 70
+FOV_MAX = 90
+DEFAULT_FOV = 80
+
+# Fyzika skoku.
+GRAVITY = 1850
+JUMP_VEL = -980
+BOOST_JUMP_VEL = -1120
+
+# Základní rychlost hry.
+BASE_SPEED = 320
+BOOST_SPEED_ADD = 220
+BOOST_DURATION = 3.5
+
+# Rozestupy překážek.
+SPAWN_OBS_MIN = 1.9
+SPAWN_OBS_MAX = 2.8
+MIN_OBS_GAP_PX = 380
+
+# Banány.
+SPAWN_BANANA_MIN = 2.5
+SPAWN_BANANA_MAX = 4.3
+
+# Velikosti, hitboxy a animace.
+MONKEY_SCALE = 160
+HITBOX_PAD = 8
+ANIM_RUN_FPS = 12
+ANIM_JUMP_FPS = 10
+BANANA_SCALE = (110, 110)
+BARRICADE_SCALE_FACTOR = 0.25
+
+# Přepni na False, až nebudeš chtít vidět zelené/červené hitboxy.
+SHOW_DEBUG_HITBOX = True
